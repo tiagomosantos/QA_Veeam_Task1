@@ -3,22 +3,22 @@ from typing import Set, Dict
 import stat
 import shutil
 import hashlib
+import time
 import logging
 
 class DirectorySynchronizer:
-    def __init__(self, dir1: str, dir2: str):
+    def __init__(self, dir1: str, dir2: str, sync_interval: int, info_log_file: str, error_log_file: str) -> None:
         self.dir1 = Path(dir1)
         self.dir2 = Path(dir2)
-        self.deleted_files = []
-        self.deleted_directories = []
+        self.sync_interval = sync_interval  
 
         # Initialize the logger inside the class
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
         # Create handlers
-        info_handler = logging.FileHandler('info.log')
-        error_handler = logging.FileHandler('error.log')
+        info_handler = logging.FileHandler(info_log_file)
+        error_handler = logging.FileHandler(error_log_file)
 
         # Set levels for handlers
         info_handler.setLevel(logging.INFO)
@@ -93,8 +93,6 @@ class DirectorySynchronizer:
             self.logger.error(f"Error deleting file {filepath}: {e}")
             return
         
-        self.deleted_files.append(str(filepath))
-
     def delete_directory(self, dirpath: Path) -> None:
         """Delete a directory recursively and handle errors."""
         try:
@@ -103,8 +101,6 @@ class DirectorySynchronizer:
             self.logger.error(f"Error deleting directory {dirpath}: {e}")
             return
         
-        self.deleted_directories.append(str(dirpath))
-
     def copy_file_from_source(self, filename: Path) -> None:
         """Copy a file from the source directory to the target directory, creating directories as needed."""
         
@@ -177,15 +173,23 @@ class DirectorySynchronizer:
                         self.logger.error(f"Error updating file {file2}: {e}")
 
     def sync_directories(self) -> None:
-        """Sync the contents of two directories."""
-        comparasion_object = self.compare(self.dir1, self.dir2)
-        self.purge(comparasion_object)
-        self.checks_only_on_source(comparasion_object)
-        self.update_common_files(comparasion_object)
-
+        """Sync the contents of two directories periodically."""
+        while True:
+            comparasion_object = self.compare(self.dir1, self.dir2)
+            self.purge(comparasion_object)
+            self.checks_only_on_source(comparasion_object)
+            self.update_common_files(comparasion_object)
+            time.sleep(self.sync_interval)  # Wait for the defined interval before the next synchronization
 
 source = 'tests/folder1'
 replica = 'tests/folder2'
+sync_interval = 60  # Sync every 60 seconds
+info_log_file = 'info.log'
+error_log_file = 'error.log'
 
-syncronizer = DirectorySynchronizer(source, replica)
-syncronizer.sync_directories()
+# Check if the source folder exist
+if not Path(source).exists():
+    print(f"Source directory {source} does not exist.")
+else:
+    syncronizer = DirectorySynchronizer(source, replica, sync_interval, info_log_file, error_log_file)
+    syncronizer.sync_directories()

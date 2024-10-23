@@ -2,6 +2,7 @@ import os
 from typing import Set, Dict
 import stat
 import shutil
+import hashlib
 
 class MyClass:
     def __init__(self, dir1, dir2):
@@ -160,6 +161,64 @@ class MyClass:
             elif stat.S_ISDIR(st.st_mode):
                 self.create_directory_in_target(f1)
 
+    def calculate_sha256(self, file_path: str) -> str:
+        """Calculate the SHA-256 hash of a file."""
+        
+        # Create a new SHA-256 hash object
+        sha256 = hashlib.sha256()
+    
+        try:
+            with open(file_path, "rb") as f:
+                # Read the file in chunks to avoid memory issues with large files
+                for byte_block in iter(lambda: f.read(4096), b""):
+                    sha256.update(byte_block)
+        except Exception as e:
+            print(f"Error calculating SHA-256 hash for {file_path}: {e}")
+            return None
+        
+        return sha256.hexdigest()
+
+    def update_common_files(self, comparasion_object: Dict[str, Set[str]]) -> None:
+        """Update common files between the two directories."""
+        common_files = comparasion_object['common']
+
+        for f in common_files:
+            try:
+                st = os.stat(os.path.join(self.dir1, f))
+            except:
+                print(f"Error accessing {f}")
+                continue
+            
+            # Check if it's a file
+            if stat.S_ISREG(st.st_mode):
+                file1 = os.path.join(self.dir1, f)
+                file2 = os.path.join(self.dir2, f)
+
+                # Check if file exists in dir1 and dir2
+                try:
+                    st1 = os.stat(file1)
+                except os.error:
+                    print(f"Error accessing {file1}")
+                    return
+                try:
+                    st2 = os.stat(file2)
+                except os.error:
+                    print(f"Error accessing {file2}")
+                    return
+                
+                # Calculate SHA-256 hashes for both files
+                hash1 = self.calculate_sha256(file1)
+                hash2 = self.calculate_sha256(file2)
+
+                # Only update the file if the hashes differ
+                if hash1 is not None and hash2 is not None and hash1 != hash2:
+                    try:
+                        shutil.copy2(file1, file2)
+                        print(f"Updated file {file2}")
+                    except Exception as e:
+                        print(f"Error updating file {file2}: {e}")
+                        continue
+
     def sync(self) -> None:
         """Sync the contents of two directories."""
         
@@ -171,6 +230,9 @@ class MyClass:
 
         # Adds files and directories only present in the source directory
         self.checks_only_on_source(comparasion_object)
+
+        # Update common files between the two directories
+        self.update_common_files(comparasion_object)
 
 source = 'tests/folder1'
 replica = 'tests/folder2'

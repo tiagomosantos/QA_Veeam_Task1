@@ -182,14 +182,6 @@ class DirectorySynchronizer:
             self.update_common_files(comparasion_object)
             time.sleep(self.sync_interval)  # Wait for the defined interval before the next synchronization
 
-source = 'tests/folder1'
-replica = 'tests/folder2'
-sync_interval = 60  # Sync every 60 seconds
-info_log_file = 'info.log'
-error_log_file = 'error.log'
-
-
-
 
 def main():
     # Set up argument parser

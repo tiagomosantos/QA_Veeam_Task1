@@ -1,23 +1,38 @@
-from pathlib import Path
-from typing import Set, Dict
-import stat
-import shutil
-import hashlib
-import time
-import logging
+""" 
+This script synchronizes two directories periodically. 
+It compares the contents of two directories and performs the following actions:
+1. Purge files and directories that exist only in the target directory.
+2. Copy files and directories that exist only in the source directory to the target directory.
+3. Update common files between the two directories.
+"""
+
 import argparse
+import hashlib
+import logging
+import shutil
+import stat
+import time
+from pathlib import Path
+from typing import Dict, Set
+
 
 class DirectorySynchronizer:
-    def __init__(self, dir1: str, dir2: str, sync_interval: int, info_log: str, error_log: str) -> None:
+    """Class to synchronize two directories periodically."""
+
+    def __init__(
+        self, dir1: str, dir2: str, sync_interval: int, loggers: tuple
+    ) -> None:
         self.dir1 = Path(dir1)
         self.dir2 = Path(dir2)
-        self.sync_interval = sync_interval  
+        self.sync_interval = sync_interval
 
         # Initialize the logger inside the class
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
         # Create handlers
+        info_log = loggers[0]
+        error_log = loggers[1]
         info_handler = logging.FileHandler(info_log)
         error_handler = logging.FileHandler(error_log)
 
@@ -26,7 +41,7 @@ class DirectorySynchronizer:
         error_handler.setLevel(logging.ERROR)
 
         # Create formatters and add them to handlers
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         info_handler.setFormatter(formatter)
         error_handler.setFormatter(formatter)
 
@@ -37,15 +52,15 @@ class DirectorySynchronizer:
     def walk_directory(self, directory: Path, result_set: Set[Path]) -> None:
         """Walk through a directory and store relative paths."""
         try:
-            for path in directory.rglob('*'):
+            for path in directory.rglob("*"):
                 relative_path = path.relative_to(directory)
                 result_set.add(relative_path)
         except OSError as e:
-            self.logger.error(f"Error accessing directory {directory}: {e}")
+            self.logger.error("Error accessing directory %s: %s", directory, e)
 
     def compare(self, dir1: Path, dir2: Path) -> Dict[str, Set[Path]]:
         """Compare contents of two directories without pattern matching."""
-        
+
         dir1_contents: Set[Path] = set()  # To store files and directories from dir1
         dir2_contents: Set[Path] = set()  # To store files and directories from dir2
 
@@ -55,32 +70,33 @@ class DirectorySynchronizer:
 
         # Find common files and directories
         common: Set[Path] = dir1_contents.intersection(dir2_contents)
-        
+
         # Remove common files/directories from both sets
         dir1_contents.difference_update(common)
         dir2_contents.difference_update(common)
 
-        comparasion_object: Dict[str, Set[Path]] = {'only_dir1': dir1_contents, 'only_dir2': dir2_contents, 'common': common}
+        comparasion_object: Dict[str, Set[Path]] = {
+            "only_dir1": dir1_contents,
+            "only_dir2": dir2_contents,
+            "common": common,
+        }
 
         return comparasion_object
-        
 
     def purge(self, comparasion_object: Dict[str, Set[Path]]) -> None:
         """Purge files and directories that exist only in the target directory (dir2)."""
-        
         # Iterate through the files and directories present only in dir2
-        for f2 in comparasion_object['only_dir2']:
+        for f2 in comparasion_object["only_dir2"]:
             fullf2 = self.dir2 / f2  # Full path to the file/directory in dir2
-
             try:
                 if fullf2.is_file():
-                    self.logger.info(f"Deleting file {fullf2}")
+                    self.logger.info("Deleting file %s", fullf2)
                     self.delete_file(fullf2)
                 elif fullf2.is_dir():
-                    self.logger.info(f"Deleting directory {fullf2}")
+                    self.logger.info("Deleting directory %s", fullf2)
                     self.delete_directory(fullf2)
-            except Exception as e:
-                self.logger.error(f"Error purging {fullf2}: {e}")
+            except (PermissionError, OSError) as e:
+                self.logger.error("Error purging %s: %s", fullf2, e)
                 continue
 
     def delete_file(self, filepath: Path) -> None:
@@ -90,30 +106,34 @@ class DirectorySynchronizer:
         except PermissionError:
             filepath.chmod(stat.S_IWRITE)
             filepath.unlink()
-        except OSError as e:
-            self.logger.error(f"Error deleting file {filepath}: {e}")
             return
-        
+        except OSError as e:
+            self.logger.error("Error deleting file %s: %s", filepath, e)
+            return
+
     def delete_directory(self, dirpath: Path) -> None:
         """Delete a directory recursively and handle errors."""
         try:
             shutil.rmtree(dirpath, ignore_errors=True)
-        except shutil.Error as e:
-            self.logger.error(f"Error deleting directory {dirpath}: {e}")
             return
-        
+        except shutil.Error as e:
+            self.logger.error("Error deleting directory %s: %s", dirpath, e)
+            return
+
     def copy_file_from_source(self, filename: Path) -> None:
-        """Copy a file from the source directory to the target directory, creating directories as needed."""
-        
+        """Copy a file from the source directory to the target directory,
+        creating directories as needed."""
+
         source_file = self.dir1 / filename
         destination_dir = self.dir2 / filename.parent
-        
+
         try:
             destination_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_file, self.dir2 / filename)
-            self.logger.info(f"Copied file {source_file} to {self.dir2 / filename}")
-        except Exception as e:
-            self.logger.error(f"Error copying file {source_file}: {e}")
+            self.logger.info("Copied file %s to %s", source_file, self.dir2 / filename)
+            return
+        except (PermissionError, OSError) as e:
+            self.logger.error("Error copying file %s: %s", source_file, e)
             return
 
     def create_directory_in_target(self, f1: Path) -> None:
@@ -121,42 +141,43 @@ class DirectorySynchronizer:
         to_make = self.dir2 / f1
         try:
             to_make.mkdir(parents=True, exist_ok=True)
-            self.logger.info(f"Created directory {to_make}")
+            self.logger.info("Created directory %s", to_make)
+            return
         except OSError as e:
-            self.logger.error(f"Error creating directory {to_make}: {e}")
+            self.logger.error("Error creating directory %s: %s", to_make, e)
             return
 
     def checks_only_on_source(self, comparasion_object: Dict[str, Set[Path]]) -> None:
         """Handle files and directories only present in the source directory (dir1)."""
 
-        for f1 in comparasion_object['only_dir1']:
+        for f1 in comparasion_object["only_dir1"]:
             fullf1 = self.dir1 / f1
             try:
                 if fullf1.is_file():
                     self.copy_file_from_source(f1)
                 elif fullf1.is_dir():
                     self.create_directory_in_target(f1)
-            except Exception as e:
-                self.logger.error(f"Error accessing {f1}: {e}")
-                continue  
+            except (PermissionError, OSError) as e:
+                self.logger.error("Error accessing %s: %s", f1, e)
+                continue
 
     def calculate_sha256(self, file_path: Path) -> str:
         """Calculate the SHA-256 hash of a file."""
         sha256 = hashlib.sha256()
-    
+
         try:
             with file_path.open("rb") as f:
                 for byte_block in iter(lambda: f.read(4096), b""):
                     sha256.update(byte_block)
-        except Exception as e:
-            self.logger.error(f"Error calculating SHA-256 hash for {file_path}: {e}")
-            return None
-        
+        except (PermissionError, OSError) as e:
+            self.logger.error("Error calculating SHA-256 hash for %s: %s", file_path, e)
+            return ""
+
         return sha256.hexdigest()
 
     def update_common_files(self, comparasion_object: Dict[str, Set[Path]]) -> None:
         """Update common files between the two directories."""
-        common_files = comparasion_object['common']
+        common_files = comparasion_object["common"]
 
         for f in common_files:
             file1 = self.dir1 / f
@@ -166,12 +187,12 @@ class DirectorySynchronizer:
                 hash1 = self.calculate_sha256(file1)
                 hash2 = self.calculate_sha256(file2)
 
-                if hash1 and hash2 and hash1 != hash2:
+                if hash1 != hash2 and hash1 != "" and hash2 != "":
                     try:
                         shutil.copy2(file1, file2)
-                        self.logger.info(f"Updated file {file2}")
-                    except Exception as e:
-                        self.logger.error(f"Error updating file {file2}: {e}")
+                        self.logger.info("Updated file %s", file2)
+                    except (PermissionError, OSError) as e:
+                        self.logger.error("Error updating file %s: %s", file2, e)
 
     def sync_directories(self) -> None:
         """Sync the contents of two directories periodically."""
@@ -180,38 +201,60 @@ class DirectorySynchronizer:
             self.purge(comparasion_object)
             self.checks_only_on_source(comparasion_object)
             self.update_common_files(comparasion_object)
-            time.sleep(self.sync_interval)  # Wait for the defined interval before the next synchronization
+            time.sleep(
+                self.sync_interval
+            )  # Wait for the defined interval before the next synchronization
 
 
 def main():
+    """Main function to parse arguments and start the synchronization process."""
     # Set up argument parser
-    parser = argparse.ArgumentParser(description="Synchronize two directories periodically.")
-    
+    parser = argparse.ArgumentParser(
+        description="Synchronize two directories periodically."
+    )
+
     parser.add_argument("source", type=str, help="Source folder path")
     parser.add_argument("replica", type=str, help="Replica folder path")
-    
+
     # Add optional arguments with default values
-    parser.add_argument("--interval", type=int, default=30, help="Synchronization interval in seconds (default: 30)")
-    parser.add_argument("--info_log", type=str, default="info.log", help="Path to log file for info messages (default: 'info.log')")
-    parser.add_argument("--error_log", type=str, default="error.log", help="Path to log file for error messages (default: 'error.log')")
-    
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=30,
+        help="Synchronization interval in seconds (default: 30)",
+    )
+    parser.add_argument(
+        "--info_log",
+        type=str,
+        default="info.log",
+        help="Path to log file for info messages (default: 'info.log')",
+    )
+    parser.add_argument(
+        "--error_log",
+        type=str,
+        default="error.log",
+        help="Path to log file for error messages (default: 'error.log')",
+    )
+
     args = parser.parse_args()
-    
+
+    loggers = (args.info_log, args.error_log)
+
     # Check if the source folder exist
     if not Path(args.source).exists():
         print(f"Source directory {args.source} does not exist.")
     else:
         # Initialize the synchronizer with the arguments
         synchronizer = DirectorySynchronizer(
-            dir1=args.source, 
-            dir2=args.replica, 
-            sync_interval=args.interval, 
-            info_log=args.info_log, 
-            error_log=args.error_log
+            dir1=args.source,
+            dir2=args.replica,
+            sync_interval=args.interval,
+            loggers=loggers,
         )
-        
+
         # Start the synchronization process
         synchronizer.sync_directories()
+
 
 if __name__ == "__main__":
     main()

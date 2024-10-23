@@ -198,8 +198,8 @@ def main():
     args = parser.parse_args()
     
     # Check if the source folder exist
-    if not Path(source).exists():
-        print(f"Source directory {source} does not exist.")
+    if not Path(args.source).exists():
+        print(f"Source directory {args.source} does not exist.")
     else:
         # Initialize the synchronizer with the arguments
         synchronizer = DirectorySynchronizer(

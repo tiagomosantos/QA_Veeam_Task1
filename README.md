@@ -1,2 +1,2 @@
 # QA_Veeam_Task1
-[Download the PDF](Task1.pdf)
+![Preview of the PDF](Task1.png)

@@ -5,9 +5,10 @@ import shutil
 import hashlib
 import time
 import logging
+import argparse
 
 class DirectorySynchronizer:
-    def __init__(self, dir1: str, dir2: str, sync_interval: int, info_log_file: str, error_log_file: str) -> None:
+    def __init__(self, dir1: str, dir2: str, sync_interval: int, info_log: str, error_log: str) -> None:
         self.dir1 = Path(dir1)
         self.dir2 = Path(dir2)
         self.sync_interval = sync_interval  
@@ -17,8 +18,8 @@ class DirectorySynchronizer:
         self.logger.setLevel(logging.DEBUG)
 
         # Create handlers
-        info_handler = logging.FileHandler(info_log_file)
-        error_handler = logging.FileHandler(error_log_file)
+        info_handler = logging.FileHandler(info_log)
+        error_handler = logging.FileHandler(error_log)
 
         # Set levels for handlers
         info_handler.setLevel(logging.INFO)
@@ -187,9 +188,38 @@ sync_interval = 60  # Sync every 60 seconds
 info_log_file = 'info.log'
 error_log_file = 'error.log'
 
-# Check if the source folder exist
-if not Path(source).exists():
-    print(f"Source directory {source} does not exist.")
-else:
-    syncronizer = DirectorySynchronizer(source, replica, sync_interval, info_log_file, error_log_file)
-    syncronizer.sync_directories()
+
+
+
+def main():
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Synchronize two directories periodically.")
+    
+    parser.add_argument("source", type=str, help="Source folder path")
+    parser.add_argument("replica", type=str, help="Replica folder path")
+    
+    # Add optional arguments with default values
+    parser.add_argument("--interval", type=int, default=30, help="Synchronization interval in seconds (default: 30)")
+    parser.add_argument("--info_log", type=str, default="info.log", help="Path to log file for info messages (default: 'info.log')")
+    parser.add_argument("--error_log", type=str, default="error.log", help="Path to log file for error messages (default: 'error.log')")
+    
+    args = parser.parse_args()
+    
+    # Check if the source folder exist
+    if not Path(source).exists():
+        print(f"Source directory {source} does not exist.")
+    else:
+        # Initialize the synchronizer with the arguments
+        synchronizer = DirectorySynchronizer(
+            dir1=args.source, 
+            dir2=args.replica, 
+            sync_interval=args.interval, 
+            info_log=args.info_log, 
+            error_log=args.error_log
+        )
+        
+        # Start the synchronization process
+        synchronizer.sync_directories()
+
+
+main()

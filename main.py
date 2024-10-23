@@ -221,5 +221,5 @@ def main():
         # Start the synchronization process
         synchronizer.sync_directories()
 
-
-main()
+if __name__ == "__main__":
+    main()

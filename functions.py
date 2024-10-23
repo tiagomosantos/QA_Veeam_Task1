@@ -3,6 +3,7 @@ from typing import Set, Dict
 import stat
 import shutil
 import hashlib
+import logging
 
 class DirectorySynchronizer:
     def __init__(self, dir1: str, dir2: str):
@@ -11,6 +12,27 @@ class DirectorySynchronizer:
         self.deleted_files = []
         self.deleted_directories = []
 
+        # Initialize the logger inside the class
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
+
+        # Create handlers
+        info_handler = logging.FileHandler('info.log')
+        error_handler = logging.FileHandler('error.log')
+
+        # Set levels for handlers
+        info_handler.setLevel(logging.INFO)
+        error_handler.setLevel(logging.ERROR)
+
+        # Create formatters and add them to handlers
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        info_handler.setFormatter(formatter)
+        error_handler.setFormatter(formatter)
+
+        # Add handlers to the logger
+        self.logger.addHandler(info_handler)
+        self.logger.addHandler(error_handler)
+
     def walk_directory(self, directory: Path, result_set: Set[Path]) -> None:
         """Walk through a directory and store relative paths."""
         try:
@@ -18,7 +40,7 @@ class DirectorySynchronizer:
                 relative_path = path.relative_to(directory)
                 result_set.add(relative_path)
         except OSError as e:
-            print(f"Error accessing directory {directory}: {e}")
+            self.logger.error(f"Error accessing directory {directory}: {e}")
 
     def compare(self, dir1: Path, dir2: Path) -> Dict[str, Set[Path]]:
         """Compare contents of two directories without pattern matching."""
@@ -51,13 +73,13 @@ class DirectorySynchronizer:
 
             try:
                 if fullf2.is_file():
-                    print(f"Deleting file {fullf2}")
+                    self.logger.info(f"Deleting file {fullf2}")
                     self.delete_file(fullf2)
                 elif fullf2.is_dir():
-                    print(f"Deleting directory {fullf2}")
+                    self.logger.info(f"Deleting directory {fullf2}")
                     self.delete_directory(fullf2)
             except Exception as e:
-                print(f"Error purging {fullf2}: {e}")
+                self.logger.error(f"Error purging {fullf2}: {e}")
                 continue
 
     def delete_file(self, filepath: Path) -> None:
@@ -68,7 +90,7 @@ class DirectorySynchronizer:
             filepath.chmod(stat.S_IWRITE)
             filepath.unlink()
         except OSError as e:
-            print(f"Error deleting file {filepath}: {e}")
+            self.logger.error(f"Error deleting file {filepath}: {e}")
             return
         
         self.deleted_files.append(str(filepath))
@@ -78,7 +100,7 @@ class DirectorySynchronizer:
         try:
             shutil.rmtree(dirpath, ignore_errors=True)
         except shutil.Error as e:
-            print(f"Error deleting directory {dirpath}: {e}")
+            self.logger.error(f"Error deleting directory {dirpath}: {e}")
             return
         
         self.deleted_directories.append(str(dirpath))
@@ -92,9 +114,9 @@ class DirectorySynchronizer:
         try:
             destination_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source_file, self.dir2 / filename)
-            print(f"Copied file {source_file} to {self.dir2 / filename}")
+            self.logger.info(f"Copied file {source_file} to {self.dir2 / filename}")
         except Exception as e:
-            print(f"Error copying file {source_file}: {e}")
+            self.logger.error(f"Error copying file {source_file}: {e}")
             return
 
     def create_directory_in_target(self, f1: Path) -> None:
@@ -102,9 +124,9 @@ class DirectorySynchronizer:
         to_make = self.dir2 / f1
         try:
             to_make.mkdir(parents=True, exist_ok=True)
-            print(f"Created directory {to_make}")
+            self.logger.info(f"Created directory {to_make}")
         except OSError as e:
-            print(f"Error creating directory {to_make}: {e}")
+            self.logger.error(f"Error creating directory {to_make}: {e}")
             return
 
     def checks_only_on_source(self, comparasion_object: Dict[str, Set[Path]]) -> None:
@@ -118,7 +140,7 @@ class DirectorySynchronizer:
                 elif fullf1.is_dir():
                     self.create_directory_in_target(f1)
             except Exception as e:
-                print(f"Error accessing {f1}: {e}")
+                self.logger.error(f"Error accessing {f1}: {e}")
                 continue  
 
     def calculate_sha256(self, file_path: Path) -> str:
@@ -130,7 +152,7 @@ class DirectorySynchronizer:
                 for byte_block in iter(lambda: f.read(4096), b""):
                     sha256.update(byte_block)
         except Exception as e:
-            print(f"Error calculating SHA-256 hash for {file_path}: {e}")
+            self.logger.error(f"Error calculating SHA-256 hash for {file_path}: {e}")
             return None
         
         return sha256.hexdigest()
@@ -150,9 +172,9 @@ class DirectorySynchronizer:
                 if hash1 and hash2 and hash1 != hash2:
                     try:
                         shutil.copy2(file1, file2)
-                        print(f"Updated file {file2}")
+                        self.logger.info(f"Updated file {file2}")
                     except Exception as e:
-                        print(f"Error updating file {file2}: {e}")
+                        self.logger.error(f"Error updating file {file2}: {e}")
 
     def sync_directories(self) -> None:
         """Sync the contents of two directories."""
